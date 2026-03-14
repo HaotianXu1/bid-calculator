@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>投标报价利润测算工具</title>
+<!-- 替换为兼容性更好的Chart.js 3.9.1版本（微信浏览器适配） -->
+<script src="https://cdn.bootcdn.net/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+<script src="https://cdn.bootcdn.net/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+  *{
+    box-sizing:border-box;
+    margin:0;
+    padding:0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  body{
+    background:#f0f2f5;
+    padding:12px;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+  }
+  .container{
+    width:100%;
+    max-width:1200px;
+    margin:0 auto;
+    position: relative;
+    padding-bottom: 20px;
+  }
+  .export-btn {
+    position: absolute;
+    top: 0;
+    right: 0;
+    max-width: 180px;
+    padding: 10px 16px;
+    background: #2563eb;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    z-index: 100;
+    -webkit-appearance: none;
+  }
+  .export-btn:hover {
+    background: #1d4ed8;
+  }
+  .card{
+    background:white;
+    border-radius:16px;
+    padding:20px;
+    margin-bottom:16px;
+    box-shadow:0 4px 12px rgba(0,0,0,0.08);
+  }
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(140px,1fr));
+    gap:12px;
+    margin-bottom:16px;
+  }
+  .grid-row{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+    gap:12px;
+    margin-bottom:20px;
+  }
+  .item{
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+  }
+  label{
+    font-size:14px;
+    color:#111827;
+    font-weight:500;
+  }
+  input{
+    padding:12px 10px;
+    border:1px solid #d1d5db;
+    border-radius:8px;
+    font-size:15px;
+    color:#111827;
+    width:100%;
+    -webkit-appearance: none;
+  }
+  input:focus{
+    outline:none;
+    border-color:#0066cc;
+  }
+  button{
+    padding:12px 24px;
+    background:#0066cc;
+    color:white;
+    border:none;
+    border-radius:8px;
+    font-size:16px;
+    font-weight:600;
+    width:100%;
+    max-width:300px;
+    margin:0 auto;
+    display:block;
+    cursor:pointer;
+    -webkit-appearance: none;
+  }
+  button:hover{
+    background:#0052a3;
+  }
+  /* 图表容器终极修复：固定尺寸+强制显示 */
+  .chart-box{
+    height:420px;
+    width:100%;
+    position: relative;
+    overflow: hidden;
+    background: #fff;
+    border-radius: 8px;
+  }
+  #chart {
+    width: 100% !important;
+    height: 100% !important;
+    display: block !important;
+  }
+  table{
+    width:100%;
+    border-collapse:collapse;
+    font-size:14px;
+    overflow-x:auto;
+    display:block;
+    -webkit-overflow-scrolling: touch;
+  }
+  th,td{
+    border:1px solid #d1d5db;
+    padding:10px 8px;
+    text-align:center;
+    color:#111827;
+  }
+  th{
+    background:#f9fafb;
+    font-weight:600;
+  }
+  tr:nth-child(even){
+    background:#f9fafb;
+  }
+  .negative-profit{
+    color:#ef4444;
+    font-weight:500;
+  }
+  .break-even{
+    color:#111827;
+    font-weight:bold;
+  }
+  h3{
+    font-size:20px;
+    text-align:center;
+    margin-bottom:20px;
+  }
+  h4{
+    font-size:18px;
+    margin-bottom:12px;
+  }
+  @media (max-width:768px){
+    .chart-box{height:380px !important;}
+    .export-btn {
+      position: relative;
+      top: unset;
+      right: unset;
+      margin: 0 0 10px auto;
+      display: block;
+    }
+    body{padding:8px;}
+    .card{padding:15px;}
+  }
+  @media (max-width:480px){
+    .grid,.grid-row{grid-template-columns:1fr;}
+    .chart-box{height:300px !important;}
+    input{padding:10px 8px;}
+    button{padding:10px 20px;font-size:15px;}
+    h3{font-size:18px;}
+    h4{font-size:16px;}
+    td,th{font-size:13px;padding:8px 4px;}
+  }
+  .toast {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(0,0,0,0.8);
+    color: white;
+    padding: 15px 25px;
+    border-radius: 8px;
+    font-size: 14px;
+    z-index: 9999;
+    display: none;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <button class="export-btn" onclick="exportFullPageAsImage()">导出全部内容为图片</button>
+  <div class="toast" id="toast"></div>
+
+  <div class="card">
+    <h3>投标报价利润测算工具</h3>
+    <div class="grid">
+      <div class="item">
+        <label>最高限价（含税万元）</label>
+        <input type="number" id="price_limit" value="100" step="0.01">
+      </div>
+      <div class="item">
+        <label>成本（含税万元）</label>
+        <input type="number" id="cost" value="60" step="0.01">
+      </div>
+      <div class="item">
+        <label>增值税率 %</label>
+        <input type="number" id="vat" value="13" step="0.01">
+      </div>
+      <div class="item">
+        <label>代理费率 %</label>
+        <input type="number" id="agent_rate" value="19" step="0.01">
+      </div>
+      <div class="item">
+        <label>代理费开票税点 %</label>
+        <input type="number" id="agent_tax" value="8" step="0.01">
+      </div>
+      <div class="item">
+        <label>管理费率 %</label>
+        <input type="number" id="manage_rate" value="8.07" step="0.01">
+      </div>
+    </div>
+    <div class="grid-row">
+      <div class="item">
+        <label>折扣率区间（起始 %）</label>
+        <input type="number" id="discount_start" value="100" step="1" min="0" max="100">
+      </div>
+      <div class="item">
+        <label>折扣率区间（结束 %）</label>
+        <input type="number" id="discount_end" value="70" step="1" min="0" max="100">
+      </div>
+    </div>
+    <button onclick="calc()">立即计算</button>
+  </div>
+
+  <div class="card">
+    <div class="chart-box">
+      <canvas id="chart"></canvas>
+    </div>
+  </div>
+
+  <div class="card">
+    <h4>详细测算表（折扣 <span id="discount_range_text">100% ~ 70%</span>）</h4>
+    <div id="table_result"></div>
+  </div>
+</div>
+
+<script>
+let chart = null;
+function showToast(text, duration = 2000) {
+  const toast = document.getElementById('toast');
+  toast.textContent = text;
+  toast.style.display = 'block';
+  setTimeout(() => {
+    toast.style.display = 'none';
+  }, duration);
+}
+
+function safeParseFloat(v){const n=parseFloat(v);return isNaN(n)?0:n;}
+
+function exportFullPageAsImage() {
+  const container = document.querySelector('.container');
+  showToast('正在生成图片，请稍候...');
+  
+  html2canvas(container, {
+    scale: 2,
+    useCORS: true,
+    logging: false,
+    allowTaint: true,
+    foreignObjectRendering: false
+  }).then(canvas => {
+    try {
+      const fileName = `投标利润测算_${new Date().toLocaleString().replace(/[/:\s]/g, '-')}.png`;
+      const img = new Image();
+      img.src = canvas.toDataURL('image/png');
+      img.style.position = 'fixed';
+      img.style.top = '0';
+      img.style.left = '0';
+      img.style.width = '100%';
+      img.style.height = '100%';
+      img.style.objectFit = 'contain';
+      img.style.background = 'white';
+      img.style.zIndex = '99999';
+      img.onclick = () => document.body.removeChild(img);
+      document.body.appendChild(img);
+      showToast('图片已生成，长按图片可保存', 3000);
+    } catch (err) {
+      showToast('导出失败：' + err.message);
+    }
+  }).catch(err => {
+    showToast('导出失败：' + err.message);
+  });
+}
+
+function calc(){
+  const price_limit = safeParseFloat(document.getElementById('price_limit').value);
+  const cost = safeParseFloat(document.getElementById('cost').value);
+  const vat = safeParseFloat(document.getElementById('vat').value)/100;
+  const agent_rate = safeParseFloat(document.getElementById('agent_rate').value)/100;
+  const agent_tax = safeParseFloat(document.getElementById('agent_tax').value)/100;
+  const manage_rate = safeParseFloat(document.getElementById('manage_rate').value)/100;
+
+  let d1 = safeParseFloat(document.getElementById('discount_start').value);
+  let d2 = safeParseFloat(document.getElementById('discount_end').value);
+  const start = Math.max(0,Math.min(100,d1));
+  const end = Math.max(0,Math.min(100,d2));
+  const from = Math.max(start,end);
+  const to = Math.min(start,end);
+
+  document.getElementById('discount_range_text').innerText = `${from}% ~ ${to}%`;
+
+  const discounts = [];
+  for(let d=from;d>=to;d--)discounts.push(d/100);
+
+  const data = discounts.map(d=>{
+    const sale = price_limit*d;
+    const sale_ex = vat?sale/(1+vat):sale;
+    const cost_ex = vat?cost/(1+vat):cost;
+    const agent = sale*agent_rate;
+    const agent_fee = agent*(1+agent_tax);
+    const manage = sale_ex*manage_rate;
+    const profit1 = sale_ex - cost_ex - agent_fee;
+    const profit2 = profit1 - manage;
+    return {d,discountLabel:(d*100).toFixed(0)+'%',profit1,profit2};
+  });
+
+  function findBe(key){
+    let be=null, bep=0;
+    for(let i=1;i<data.length;i++){
+      const a=data[i-1][key], b=data[i][key];
+      if(a>=0&&b<=0){
+        const t=-a/(b-a);
+        be=data[i-1].d + t*(data[i].d-data[i-1].d);
+        bep=a+t*(b-a);
+        break;
+      }
+    }
+    return {be, bep};
+  }
+
+  const r1=findBe('profit1'), r2=findBe('profit2');
+  renderTable(data,r1.be,r2.be);
+  
+  // 核心修复：移除延迟，直接渲染图表
+  renderChart(data,r1.be,r1.bep,r2.be,r2.bep);
+}
+
+function renderTable(data,be1,be2){
+  let html=`<table>
+<tr><th>折扣率</th><th>不摊销管理费利润（万元）</th><th>摊销管理费利润（万元）</th></tr>`;
+  data.forEach(x=>{
+    const m1=be1&&Math.abs(x.d-be1)<0.015;
+    const m2=be2&&Math.abs(x.d-be2)<0.015;
+    const c1=x.profit1<0?'negative-profit':m1?'break-even':'';
+    const c2=x.profit2<0?'negative-profit':m2?'break-even':'';
+    html+=`<tr>
+<td>${x.discountLabel}</td>
+<td class="${c1}">${x.profit1.toFixed(2)}</td>
+<td class="${c2}">${x.profit2.toFixed(2)}</td>
+</tr>`;
+  });
+  html+='</table>';
+  document.getElementById('table_result').innerHTML=html;
+}
+
+function renderChart(data,be1,p1,be2,p2){
+  // 强制获取canvas并重置
+  const canvas = document.getElementById('chart');
+  if (!canvas) {
+    showToast('图表容器未找到');
+    return;
+  }
+
+  // 核心修复：手动设置canvas宽高（微信浏览器必须）
+  canvas.width = canvas.offsetWidth;
+  canvas.height = canvas.offsetHeight;
+  
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  
+  if(chart) chart.destroy();
+
+  // 简化注释插件，降低兼容风险
+  const annotationPlugin = {
+    id: 'annotation',
+    afterDraw: (chart) => {
+      const ctx = chart.ctx;
+      const xAxis = chart.scales.x;
+      const yAxis = chart.scales.y;
+
+      const drawBreakEvenLine = (be, profit, color, label) => {
+        if (!be) return;
+        const discountPercent = (be * 100).toFixed(0) + '%';
+        const x = xAxis.getPixelForValue(discountPercent);
+        const y = yAxis.getPixelForValue(profit || 0);
+
+        ctx.save();
+        // 绘制虚线
+        ctx.beginPath();
+        ctx.moveTo(x, yAxis.bottom);
+        ctx.lineTo(x, y);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 4]);
+        ctx.stroke();
+        // 绘制盈亏点圆点
+        ctx.beginPath();
+        ctx.arc(x, y, 6, 0, Math.PI * 2);
+        ctx.fillStyle = '#b91c1c';
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        // 绘制文字
+        ctx.fillStyle = '#000';
+        ctx.font = '12px sans-serif';
+        ctx.fillText(label, x + 10, y - 10);
+        ctx.restore();
+      };
+
+      if (be1) drawBreakEvenLine(be1, p1, '#0052a3', `不摊销盈亏点: ${(be1*100).toFixed(1)}%`);
+      if (be2) drawBreakEvenLine(be2, p2, '#16a34a', `摊销盈亏点: ${(be2*100).toFixed(1)}%`);
+    }
+  };
+
+  // Chart.js 3.x 兼容配置
+  chart = new Chart(ctx, {
+    type: 'line',
+    plugins: [annotationPlugin],
+    data: {
+      labels: data.map(item => item.discountLabel),
+      datasets: [
+        {
+          label: '盈亏平衡线',
+          data: Array(data.length).fill(0),
+          borderColor: '#b91c1c',
+          borderWidth: 2,
+          borderDash: [5, 5],
+          pointRadius: 0,
+          fill: false
+        },
+        {
+          label: '不摊销管理费利润',
+          data: data.map(item => item.profit1),
+          borderColor: '#0052a3',
+          backgroundColor: 'rgba(0,82,163,0.1)',
+          borderWidth: 2,
+          tension: 0.2,
+          pointRadius: 3,
+          pointBackgroundColor: '#0052a3',
+          pointBorderColor: '#fff',
+          fill: true
+        },
+        {
+          label: '摊销管理费利润',
+          data: data.map(item => item.profit2),
+          borderColor: '#16a34a',
+          backgroundColor: 'rgba(22,163,74,0.1)',
+          borderWidth: 2,
+          tension: 0.2,
+          pointRadius: 3,
+          pointBackgroundColor: '#16a34a',
+          pointBorderColor: '#fff',
+          fill: true
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      layout: {
+        padding: { top: 10, right: 10, bottom: 10, left: 10 }
+      },
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: {
+            font: { size: 12 },
+            padding: 10
+          }
+        },
+        tooltip: {
+          mode: 'index',
+          intersect: false,
+          backgroundColor: 'rgba(0,0,0,0.8)',
+          titleFont: { size: 12 },
+          bodyFont: { size: 12 },
+          padding: 10
+        }
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { font: { size: 11 } },
+          title: { display: true, text: '折扣率', font: { size: 12 } }
+        },
+        y: {
+          grid: { color: '#eee' },
+          ticks: { 
+            font: { size: 11 },
+            callback: (value) => '¥' + value.toFixed(2)
+          },
+          title: { display: true, text: '利润（万元）', font: { size: 12 } }
+        }
+      },
+      animation: {
+        duration: 200
+      }
+    }
+  });
+
+  // 强制更新图表
+  chart.update();
+}
+
+// 初始化逻辑简化
+document.addEventListener('DOMContentLoaded', () => {
+  // 直接初始化计算，无需延迟
+  calc();
+
+  // 输入事件绑定
+  document.querySelectorAll('input').forEach(input => {
+    input.addEventListener('input', calc);
+    input.addEventListener('change', calc);
+    input.addEventListener('touchend', () => calc());
+  });
+
+  // 窗口变化时重绘
+  window.addEventListener('resize', () => {
+    if (chart) {
+      setTimeout(() => {
+        chart.resize();
+        chart.update();
+      }, 100);
+    }
+  });
+});
+
+// 禁止微信缩放
+window.onresize = function() {
+  document.body.style.zoom = 1;
+};
+</script>
+</body>
+</html>
